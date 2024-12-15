@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'app.dart';
+/// @docImport 'page.dart';
+/// @docImport 'predictive_back_page_transitions_builder.dart';
+library;
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';
@@ -48,7 +53,7 @@ class _FadeUpwardsPageTransition extends StatelessWidget {
 }
 
 // This transition is intended to match the default for Android P.
-class _OpenUpwardsPageTransition extends StatelessWidget {
+class _OpenUpwardsPageTransition extends StatefulWidget {
   const _OpenUpwardsPageTransition({
     required this.animation,
     required this.secondaryAnimation,
@@ -82,57 +87,99 @@ class _OpenUpwardsPageTransition extends StatelessWidget {
   final Widget child;
 
   @override
+  State<_OpenUpwardsPageTransition> createState() => _OpenUpwardsPageTransitionState();
+}
+
+class _OpenUpwardsPageTransitionState extends State<_OpenUpwardsPageTransition> {
+  late CurvedAnimation _primaryAnimation;
+  late CurvedAnimation _secondaryTranslationCurvedAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _setAnimations();
+  }
+
+  @override
+  void didUpdateWidget(covariant _OpenUpwardsPageTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animation != widget.animation ||
+        oldWidget.secondaryAnimation != widget.secondaryAnimation
+    ) {
+      _disposeAnimations();
+      _setAnimations();
+    }
+  }
+
+  void _setAnimations() {
+    _primaryAnimation = CurvedAnimation(
+      parent: widget.animation,
+      curve: _OpenUpwardsPageTransition._transitionCurve,
+      reverseCurve: _OpenUpwardsPageTransition._transitionCurve.flipped,
+    );
+    _secondaryTranslationCurvedAnimation = CurvedAnimation(
+      parent: widget.secondaryAnimation,
+      curve: _OpenUpwardsPageTransition._transitionCurve,
+      reverseCurve: _OpenUpwardsPageTransition._transitionCurve.flipped,
+    );
+  }
+
+  void _disposeAnimations() {
+    _primaryAnimation.dispose();
+    _secondaryTranslationCurvedAnimation.dispose();
+  }
+
+  @override
+  void dispose() {
+    _disposeAnimations();
+    super.dispose();
+  }
+
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final Size size = constraints.biggest;
 
-        final CurvedAnimation primaryAnimation = CurvedAnimation(
-          parent: animation,
-          curve: _transitionCurve,
-          reverseCurve: _transitionCurve.flipped,
-        );
-
         // Gradually expose the new page from bottom to top.
         final Animation<double> clipAnimation = Tween<double>(
           begin: 0.0,
           end: size.height,
-        ).animate(primaryAnimation);
+        ).animate(_primaryAnimation);
 
-        final Animation<double> opacityAnimation = _scrimOpacityTween.animate(primaryAnimation);
-        final Animation<Offset> primaryTranslationAnimation = _primaryTranslationTween.animate(primaryAnimation);
+        final Animation<double> opacityAnimation = _OpenUpwardsPageTransition._scrimOpacityTween.animate(_primaryAnimation);
+        final Animation<Offset> primaryTranslationAnimation = _OpenUpwardsPageTransition._primaryTranslationTween.animate(_primaryAnimation);
 
-        final Animation<Offset> secondaryTranslationAnimation = _secondaryTranslationTween.animate(
-          CurvedAnimation(
-            parent: secondaryAnimation,
-            curve: _transitionCurve,
-            reverseCurve: _transitionCurve.flipped,
-          ),
+        final Animation<Offset> secondaryTranslationAnimation = _OpenUpwardsPageTransition._secondaryTranslationTween.animate(
+          _secondaryTranslationCurvedAnimation,
         );
 
         return AnimatedBuilder(
-          animation: animation,
+          animation: widget.animation,
           builder: (BuildContext context, Widget? child) {
-            return Container(
+            return ColoredBox(
               color: Colors.black.withOpacity(opacityAnimation.value),
-              alignment: Alignment.bottomLeft,
-              child: ClipRect(
-                child: SizedBox(
-                  height: clipAnimation.value,
-                  child: OverflowBox(
-                    alignment: Alignment.bottomLeft,
-                    maxHeight: size.height,
-                    child: child,
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: ClipRect(
+                  child: SizedBox(
+                    height: clipAnimation.value,
+                    child: OverflowBox(
+                      alignment: Alignment.bottomLeft,
+                      maxHeight: size.height,
+                      child: child,
+                    ),
                   ),
                 ),
               ),
             );
           },
           child: AnimatedBuilder(
-            animation: secondaryAnimation,
+            animation: widget.secondaryAnimation,
             child: FractionalTranslation(
               translation: primaryTranslationAnimation.value,
-              child: child,
+              child: widget.child,
             ),
             builder: (BuildContext context, Widget? child) {
               return FractionalTranslation(
@@ -159,6 +206,7 @@ class _ZoomPageTransition extends StatelessWidget {
     required this.secondaryAnimation,
     required this.allowSnapshotting,
     required this.allowEnterRouteSnapshotting,
+    this.backgroundColor,
     this.child,
   });
 
@@ -208,6 +256,11 @@ class _ZoomPageTransition extends StatelessWidget {
   ///    routes.
   final bool allowSnapshotting;
 
+  /// The color of the scrim (background) that fades in and out during the transition.
+  ///
+  /// If not provided, defaults to current theme's [ColorScheme.surface] color.
+  final Color? backgroundColor;
+
   /// The widget below this widget in the tree.
   ///
   /// This widget will transition in and out as driven by [animation] and
@@ -225,6 +278,7 @@ class _ZoomPageTransition extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Color enterTransitionBackgroundColor = backgroundColor ?? Theme.of(context).colorScheme.surface;
     return DualTransitionBuilder(
       animation: animation,
       forwardBuilder: (
@@ -235,6 +289,7 @@ class _ZoomPageTransition extends StatelessWidget {
         return _ZoomEnterTransition(
           animation: animation,
           allowSnapshotting: allowSnapshotting && allowEnterRouteSnapshotting,
+          backgroundColor: enterTransitionBackgroundColor,
           child: child,
         );
       },
@@ -250,32 +305,14 @@ class _ZoomPageTransition extends StatelessWidget {
           child: child,
         );
       },
-      child: DualTransitionBuilder(
-        animation: ReverseAnimation(secondaryAnimation),
-        forwardBuilder: (
-          BuildContext context,
-          Animation<double> animation,
-          Widget? child,
-        ) {
-          return _ZoomEnterTransition(
-            animation: animation,
-            allowSnapshotting: allowSnapshotting && allowEnterRouteSnapshotting ,
-            reverse: true,
-            child: child,
-          );
-        },
-        reverseBuilder: (
-          BuildContext context,
-          Animation<double> animation,
-          Widget? child,
-        ) {
-          return _ZoomExitTransition(
-            animation: animation,
-            allowSnapshotting: allowSnapshotting,
-            child: child,
-          );
-        },
-        child: child,
+      child: ZoomPageTransitionsBuilder._snapshotAwareDelegatedTransition(
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+        allowSnapshotting,
+        allowEnterRouteSnapshotting,
+        enterTransitionBackgroundColor
       ),
     );
   }
@@ -286,6 +323,7 @@ class _ZoomEnterTransition extends StatefulWidget {
     required this.animation,
     this.reverse = false,
     required this.allowSnapshotting,
+    required this.backgroundColor,
     this.child,
   });
 
@@ -293,6 +331,7 @@ class _ZoomEnterTransition extends StatefulWidget {
   final Widget? child;
   final bool allowSnapshotting;
   final bool reverse;
+  final Color backgroundColor;
 
   @override
   State<_ZoomEnterTransition> createState() => _ZoomEnterTransitionState();
@@ -349,6 +388,7 @@ class _ZoomEnterTransitionState extends State<_ZoomEnterTransition> with _ZoomTr
       fade: fadeTransition,
       scale: scaleTransition,
       animation: widget.animation,
+      backgroundColor: widget.backgroundColor,
     );
     super.initState();
   }
@@ -365,6 +405,7 @@ class _ZoomEnterTransitionState extends State<_ZoomEnterTransition> with _ZoomTr
         fade: fadeTransition,
         scale: scaleTransition,
         animation: widget.animation,
+        backgroundColor: widget.backgroundColor,
       );
     }
     super.didUpdateWidget(oldWidget);
@@ -515,6 +556,11 @@ abstract class PageTransitionsBuilder {
   /// const constructors so that they can be used in const expressions.
   const PageTransitionsBuilder();
 
+  /// Provideds a secondary transition to the previous route.
+  ///
+  /// {@macro flutter.widgets.delegatedTransition}
+  DelegatedTransitionBuilder? get delegatedTransition => null;
+
   /// Wraps the child with one or more transition widgets which define how [route]
   /// arrives on and leaves the screen.
   ///
@@ -620,6 +666,7 @@ class ZoomPageTransitionsBuilder extends PageTransitionsBuilder {
   const ZoomPageTransitionsBuilder({
     this.allowSnapshotting = true,
     this.allowEnterRouteSnapshotting = true,
+    this.backgroundColor,
   });
 
   /// Whether zoom page transitions will prefer to animate a snapshot of the entering
@@ -657,10 +704,53 @@ class ZoomPageTransitionsBuilder extends PageTransitionsBuilder {
   /// not be snapshotted.
   final bool allowEnterRouteSnapshotting;
 
+  /// The color of the scrim (background) that fades in and out during the transition.
+  ///
+  /// If not provided, defaults to current theme's [ColorScheme.surface] color.
+  final Color? backgroundColor;
+
   // Allows devicelab benchmarks to force disable the snapshotting. This is
   // intended to allow us to profile and fix the underlying performance issues
   // for the Impeller backend.
   static const bool _kProfileForceDisableSnapshotting = bool.fromEnvironment('flutter.benchmarks.force_disable_snapshot');
+
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition => (BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, bool allowSnapshotting, Widget? child)
+      => _snapshotAwareDelegatedTransition(context, animation, secondaryAnimation, child, allowSnapshotting && this.allowSnapshotting, allowEnterRouteSnapshotting, backgroundColor);
+
+  // A transition builder that takes into account the snapshotting properties of
+  // ZoomPageTransitionsBuilder.
+  static Widget _snapshotAwareDelegatedTransition(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget? child, bool allowSnapshotting, bool allowEnterRouteSnapshotting, Color? backgroundColor) {
+    final Color enterTransitionBackgroundColor = backgroundColor ?? Theme.of(context).colorScheme.surface;
+    return DualTransitionBuilder(
+      animation: ReverseAnimation(secondaryAnimation),
+      forwardBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Widget? child,
+      ) {
+        return _ZoomEnterTransition(
+          animation: animation,
+          allowSnapshotting: allowSnapshotting && allowEnterRouteSnapshotting,
+          reverse: true,
+          backgroundColor: enterTransitionBackgroundColor,
+          child: child,
+        );
+      },
+      reverseBuilder: (
+        BuildContext context,
+        Animation<double> animation,
+        Widget? child,
+      ) {
+        return _ZoomExitTransition(
+          animation: animation,
+          allowSnapshotting: allowSnapshotting,
+          child: child,
+        );
+      },
+      child: child,
+    );
+  }
 
   @override
   Widget buildTransitions<T>(
@@ -682,6 +772,7 @@ class ZoomPageTransitionsBuilder extends PageTransitionsBuilder {
       secondaryAnimation: secondaryAnimation,
       allowSnapshotting: allowSnapshotting && route.allowSnapshotting,
       allowEnterRouteSnapshotting: allowEnterRouteSnapshotting,
+      backgroundColor: backgroundColor,
       child: child,
     );
   }
@@ -703,6 +794,9 @@ class ZoomPageTransitionsBuilder extends PageTransitionsBuilder {
 class CupertinoPageTransitionsBuilder extends PageTransitionsBuilder {
   /// Constructs a page transition animation that matches the iOS transition.
   const CupertinoPageTransitionsBuilder();
+
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition => CupertinoPageTransition.delegatedTransition;
 
   @override
   Widget buildTransitions<T>(
@@ -784,6 +878,16 @@ class PageTransitionsTheme with Diagnosticable {
       secondaryAnimation: secondaryAnimation,
       child: child,
     );
+  }
+
+  /// Provides the delegate transition for the target platform.
+  ///
+  /// {@macro flutter.widgets.delegatedTransition}
+  DelegatedTransitionBuilder? delegatedTransition(TargetPlatform platform) {
+    final PageTransitionsBuilder matchingBuilder =
+      builders[platform] ?? const ZoomPageTransitionsBuilder();
+
+    return matchingBuilder.delegatedTransition;
   }
 
   // Map the builders to a list with one PageTransitionsBuilder per platform for
@@ -878,7 +982,7 @@ void _drawImageScaledAndCentered(PaintingContext context, ui.Image image, double
     return;
   }
   final Paint paint = Paint()
-    ..filterQuality = ui.FilterQuality.low
+    ..filterQuality = ui.FilterQuality.medium
     ..color = Color.fromRGBO(0, 0, 0, opacity);
   final double logicalWidth = image.width / pixelRatio;
   final double logicalHeight = image.height / pixelRatio;
@@ -925,10 +1029,7 @@ mixin _ZoomTransitionBase<S extends StatefulWidget> on State<S> {
   }
 
   void onAnimationStatusChange(AnimationStatus status) {
-    controller.allowSnapshotting = switch (status) {
-      AnimationStatus.dismissed || AnimationStatus.completed => false,
-      AnimationStatus.forward   || AnimationStatus.reverse   => useSnapshot,
-    };
+    controller.allowSnapshotting = status.isAnimating && useSnapshot;
   }
 
   @override
@@ -944,6 +1045,7 @@ class _ZoomEnterTransitionPainter extends SnapshotPainter {
     required this.scale,
     required this.fade,
     required this.animation,
+    required this.backgroundColor,
   }) {
     animation.addListener(notifyListeners);
     animation.addStatusListener(_onStatusChange);
@@ -959,6 +1061,7 @@ class _ZoomEnterTransitionPainter extends SnapshotPainter {
   final Animation<double> animation;
   final Animation<double> scale;
   final Animation<double> fade;
+  final Color backgroundColor;
 
   final Matrix4 _transform = Matrix4.zero();
   final LayerHandle<OpacityLayer> _opacityHandle = LayerHandle<OpacityLayer>();
@@ -976,26 +1079,22 @@ class _ZoomEnterTransitionPainter extends SnapshotPainter {
     // instead of checking that it is `forward` is that this allows
     // the interrupted reversal of the forward transition to smoothly fade
     // the scrim away. This prevents a disjointed removal of the scrim.
-    if (!reverse && animation.status != AnimationStatus.completed) {
+    if (!reverse && !animation.isCompleted) {
       scrimOpacity = _ZoomEnterTransitionState._scrimOpacityTween.evaluate(animation)!;
     }
     assert(!reverse || scrimOpacity == 0.0);
     if (scrimOpacity > 0.0) {
       context.canvas.drawRect(
         offset & size,
-        Paint()..color = Colors.black.withOpacity(scrimOpacity),
+        Paint()..color = backgroundColor.withOpacity(scrimOpacity),
       );
     }
   }
 
   @override
   void paint(PaintingContext context, ui.Offset offset, Size size, PaintingContextCallback painter) {
-    switch (animation.status) {
-      case AnimationStatus.completed:
-      case AnimationStatus.dismissed:
-        return painter(context, offset);
-      case AnimationStatus.forward:
-      case AnimationStatus.reverse:
+    if (!animation.isAnimating) {
+      return painter(context, offset);
     }
 
     _drawScrim(context, offset, size);
@@ -1062,13 +1161,8 @@ class _ZoomExitTransitionPainter extends SnapshotPainter {
 
   @override
   void paint(PaintingContext context, ui.Offset offset, Size size, PaintingContextCallback painter) {
-    switch (animation.status) {
-      case AnimationStatus.completed:
-      case AnimationStatus.dismissed:
-        return painter(context, offset);
-      case AnimationStatus.forward:
-      case AnimationStatus.reverse:
-        break;
+    if (!animation.isAnimating) {
+      return painter(context, offset);
     }
 
     _updateScaledTransform(_transform, scale.value, size);
@@ -1214,7 +1308,7 @@ class _ZoomEnterTransitionNoCache extends StatelessWidget {
     // instead of checking that it is `forward` is that this allows
     // the interrupted reversal of the forward transition to smoothly fade
     // the scrim away. This prevents a disjointed removal of the scrim.
-    if (!reverse && animation.status != AnimationStatus.completed) {
+    if (!reverse && !animation.isCompleted) {
       opacity = _ZoomEnterTransitionState._scrimOpacityTween.evaluate(animation)!;
     }
 
@@ -1239,7 +1333,7 @@ class _ZoomEnterTransitionNoCache extends StatelessWidget {
         opacity: fadeTransition,
         child: ScaleTransition(
           scale: scaleTransition,
-          filterQuality: FilterQuality.none,
+          filterQuality: FilterQuality.medium,
           child: child,
         ),
       ),
@@ -1272,7 +1366,7 @@ class _ZoomExitTransitionNoCache extends StatelessWidget {
       opacity: fadeTransition,
       child: ScaleTransition(
         scale: scaleTransition,
-        filterQuality: FilterQuality.none,
+        filterQuality: FilterQuality.medium,
         child: child,
       ),
     );

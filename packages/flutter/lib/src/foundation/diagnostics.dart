@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'dart:developer';
+///
+/// @docImport 'package:flutter/rendering.dart';
+/// @docImport 'package:flutter/widgets.dart';
+library;
+
 import 'dart:math' as math;
 import 'dart:ui' show clampDouble;
 
@@ -974,7 +980,7 @@ class _PrefixedStringBuilder {
         if (allowWrap && wrapWidth != null) {
           final int wrapStart = _currentLine.length;
           final int wrapEnd = wrapStart + line.length;
-          if (_wrappableRanges.isNotEmpty && _wrappableRanges.last == wrapStart) {
+          if (_wrappableRanges.lastOrNull == wrapStart) {
             // Extend last range.
             _wrappableRanges.last = wrapEnd;
           } else {
@@ -1747,6 +1753,9 @@ abstract class DiagnosticsNode {
   /// `minLevel` specifies the minimum [DiagnosticLevel] for properties included
   /// in the output.
   ///
+  /// `wrapWidth` specifies the column number where word wrapping will be
+  /// applied.
+  ///
   /// The [toStringDeep] method takes other arguments, but those are intended
   /// for internal use when recursing to the descendants, and so can be ignored.
   ///
@@ -1762,12 +1771,13 @@ abstract class DiagnosticsNode {
     String? prefixOtherLines,
     TextTreeConfiguration? parentConfiguration,
     DiagnosticLevel minLevel = DiagnosticLevel.debug,
+    int wrapWidth = 65,
   }) {
     String result = '';
     assert(() {
       result = TextTreeRenderer(
         minLevel: minLevel,
-        wrapWidth: 65,
+        wrapWidth: wrapWidth,
       ).render(
         this,
         prefixLineOne: prefixLineOne,
@@ -2113,16 +2123,11 @@ class FlagProperty extends DiagnosticsProperty<bool> {
 
   @override
   String valueToString({ TextTreeConfiguration? parentConfiguration }) {
-    if (value ?? false) {
-      if (ifTrue != null) {
-        return ifTrue!;
-      }
-    } else if (value == false) {
-      if (ifFalse != null) {
-        return ifFalse!;
-      }
-    }
-    return super.valueToString(parentConfiguration: parentConfiguration);
+    return switch (value) {
+      true when ifTrue != null => ifTrue!,
+      false when ifFalse != null => ifFalse!,
+      _ => super.valueToString(parentConfiguration: parentConfiguration),
+    };
   }
 
   @override
@@ -2139,17 +2144,11 @@ class FlagProperty extends DiagnosticsProperty<bool> {
 
   @override
   DiagnosticLevel get level {
-    if (value ?? false) {
-      if (ifTrue == null) {
-        return DiagnosticLevel.hidden;
-      }
-    }
-    if (value == false) {
-      if (ifFalse == null) {
-        return DiagnosticLevel.hidden;
-      }
-    }
-    return super.level;
+    return switch (value) {
+      true  when ifTrue == null => DiagnosticLevel.hidden,
+      false when ifFalse == null => DiagnosticLevel.hidden,
+      _ => super.level,
+    };
   }
 }
 
@@ -3320,6 +3319,9 @@ abstract class DiagnosticableTree with Diagnosticable {
   /// `minLevel` specifies the minimum [DiagnosticLevel] for properties included
   /// in the output.
   ///
+  /// `wrapWidth` specifies the column number where word wrapping will be
+  /// applied.
+  ///
   /// The [toStringDeep] method takes other arguments, but those are intended
   /// for internal use when recursing to the descendants, and so can be ignored.
   ///
@@ -3332,8 +3334,9 @@ abstract class DiagnosticableTree with Diagnosticable {
     String prefixLineOne = '',
     String? prefixOtherLines,
     DiagnosticLevel minLevel = DiagnosticLevel.debug,
+    int wrapWidth = 65,
   }) {
-    return toDiagnosticsNode().toStringDeep(prefixLineOne: prefixLineOne, prefixOtherLines: prefixOtherLines, minLevel: minLevel);
+    return toDiagnosticsNode().toStringDeep(prefixLineOne: prefixLineOne, prefixOtherLines: prefixOtherLines, minLevel: minLevel, wrapWidth: wrapWidth);
   }
 
   @override
@@ -3405,8 +3408,9 @@ mixin DiagnosticableTreeMixin implements DiagnosticableTree {
     String prefixLineOne = '',
     String? prefixOtherLines,
     DiagnosticLevel minLevel = DiagnosticLevel.debug,
+    int wrapWidth = 65,
   }) {
-    return toDiagnosticsNode().toStringDeep(prefixLineOne: prefixLineOne, prefixOtherLines: prefixOtherLines, minLevel: minLevel);
+    return toDiagnosticsNode().toStringDeep(prefixLineOne: prefixLineOne, prefixOtherLines: prefixOtherLines, minLevel: minLevel, wrapWidth: wrapWidth);
   }
 
   @override

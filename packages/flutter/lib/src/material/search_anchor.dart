@@ -8,6 +8,8 @@ import 'dart:ui';
 
 import 'package:flutter/widgets.dart';
 
+import 'adaptive_text_selection_toolbar.dart';
+import 'back_button.dart';
 import 'button_style.dart';
 import 'color_scheme.dart';
 import 'colors.dart';
@@ -136,6 +138,7 @@ class SearchAnchor extends StatefulWidget {
     required this.suggestionsBuilder,
     this.textInputAction,
     this.keyboardType,
+    this.enabled = true,
   });
 
   /// Create a [SearchAnchor] that has a [SearchBar] which opens a search view.
@@ -183,6 +186,8 @@ class SearchAnchor extends StatefulWidget {
     required SuggestionsBuilder suggestionsBuilder,
     TextInputAction? textInputAction,
     TextInputType? keyboardType,
+    EdgeInsets scrollPadding,
+    EditableTextContextMenuBuilder contextMenuBuilder,
   }) = _SearchAnchorWithSearchBar;
 
   /// Whether the search view grows to fill the entire screen when the
@@ -348,6 +353,13 @@ class SearchAnchor extends StatefulWidget {
   /// Defaults to the default value specified in [TextField].
   final TextInputType? keyboardType;
 
+  /// Whether or not this widget is currently interactive.
+  ///
+  /// When false, the widget will ignore taps and appear dimmed.
+  ///
+  /// Defaults to true.
+  final bool enabled;
+
   @override
   State<SearchAnchor> createState() => _SearchAnchorState();
 }
@@ -359,6 +371,7 @@ class _SearchAnchorState extends State<SearchAnchor> {
   bool get _viewIsOpen => !_anchorIsVisible;
   SearchController? _internalSearchController;
   SearchController get _searchController => widget.searchController ?? (_internalSearchController ??= SearchController());
+  _SearchViewRoute? _route;
 
   @override
   void initState() {
@@ -389,15 +402,25 @@ class _SearchAnchorState extends State<SearchAnchor> {
 
   @override
   void dispose() {
-    super.dispose();
     widget.searchController?._detach(this);
     _internalSearchController?._detach(this);
-    _internalSearchController?.dispose();
+    final bool usingExternalController = widget.searchController != null;
+    if (_route?.navigator != null) {
+      _route?._dismiss(
+        disposeController: !usingExternalController,
+      );
+      if (usingExternalController) {
+        _internalSearchController?.dispose();
+      }
+    } else {
+      _internalSearchController?.dispose();
+    }
+    super.dispose();
   }
 
   void _openView() {
     final NavigatorState navigator = Navigator.of(context);
-    navigator.push(_SearchViewRoute(
+    _route = _SearchViewRoute(
       viewOnChanged: widget.viewOnChanged,
       viewOnSubmitted: widget.viewOnSubmitted,
       viewLeading: widget.viewLeading,
@@ -424,7 +447,8 @@ class _SearchAnchorState extends State<SearchAnchor> {
       capturedThemes: InheritedTheme.capture(from: context, to: navigator.context),
       textInputAction: widget.textInputAction,
       keyboardType: widget.keyboardType,
-    ));
+    );
+    navigator.push(_route!);
   }
 
   void _closeView(String? selectedText) {
@@ -448,15 +472,25 @@ class _SearchAnchorState extends State<SearchAnchor> {
     };
   }
 
+  double _getOpacity() {
+    if (widget.enabled) {
+      return _anchorIsVisible ? 1.0 : 0.0;
+    }
+    return _kDisableSearchBarOpacity;
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedOpacity(
       key: _anchorKey,
-      opacity: _anchorIsVisible ? 1.0 : 0.0,
+      opacity: _getOpacity(),
       duration: _kAnchorFadeDuration,
-      child: GestureDetector(
-        onTap: _openView,
-        child: widget.builder(context, _searchController),
+      child: IgnorePointer(
+        ignoring: !widget.enabled,
+        child: GestureDetector(
+          onTap: _openView,
+          child: widget.builder(context, _searchController),
+        ),
       ),
     );
   }
@@ -518,6 +552,9 @@ class _SearchViewRoute extends PopupRoute<_SearchViewRoute> {
   final CapturedThemes capturedThemes;
   final TextInputAction? textInputAction;
   final TextInputType? keyboardType;
+  CurvedAnimation? curvedAnimation;
+  CurvedAnimation? viewFadeOnIntervalCurve;
+  bool willDisposeSearchController = false;
 
   @override
   Color? get barrierColor => Colors.transparent;
@@ -559,6 +596,23 @@ class _SearchViewRoute extends PopupRoute<_SearchViewRoute> {
     updateTweens(anchorKey.currentContext!);
     toggleVisibility?.call();
     return super.didPop(result);
+  }
+
+  void _dismiss({required bool disposeController}) {
+    willDisposeSearchController = disposeController;
+    if (isActive) {
+      navigator?.removeRoute(this);
+    }
+  }
+
+  @override
+  void dispose() {
+    curvedAnimation?.dispose();
+    viewFadeOnIntervalCurve?.dispose();
+    if (willDisposeSearchController) {
+      searchController.dispose();
+    }
+    super.dispose();
   }
 
   void updateViewConfig(BuildContext context) {
@@ -620,23 +674,25 @@ class _SearchViewRoute extends PopupRoute<_SearchViewRoute> {
       child: AnimatedBuilder(
         animation: animation,
         builder: (BuildContext context, Widget? child) {
-          final Animation<double> curvedAnimation = CurvedAnimation(
+          curvedAnimation ??= CurvedAnimation(
             parent: animation,
             curve: Curves.easeInOutCubicEmphasized,
             reverseCurve: Curves.easeInOutCubicEmphasized.flipped,
           );
 
-          final Rect viewRect = _rectTween.evaluate(curvedAnimation)!;
+          final Rect viewRect = _rectTween.evaluate(curvedAnimation!)!;
           final double topPadding = showFullScreenView
-            ? lerpDouble(0.0, MediaQuery.paddingOf(context).top, curvedAnimation.value)!
+            ? lerpDouble(0.0, MediaQuery.paddingOf(context).top, curvedAnimation!.value)!
             : 0.0;
 
+          viewFadeOnIntervalCurve ??= CurvedAnimation(
+            parent: animation,
+            curve: _kViewFadeOnInterval,
+            reverseCurve: _kViewFadeOnInterval.flipped,
+          );
+
           return FadeTransition(
-            opacity: CurvedAnimation(
-              parent: animation,
-              curve: _kViewFadeOnInterval,
-              reverseCurve: _kViewFadeOnInterval.flipped,
-            ),
+            opacity: viewFadeOnIntervalCurve!,
             child: capturedThemes.wrap(
               _ViewContent(
                 viewOnChanged: viewOnChanged,
@@ -654,7 +710,7 @@ class _SearchViewRoute extends PopupRoute<_SearchViewRoute> {
                 viewHeaderHintStyle: viewHeaderHintStyle,
                 dividerColor: dividerColor,
                 showFullScreenView: showFullScreenView,
-                animation: curvedAnimation,
+                animation: curvedAnimation!,
                 topPadding: topPadding,
                 viewMaxWidth: _rectTween.end!.width,
                 viewRect: viewRect,
@@ -738,6 +794,9 @@ class _ViewContent extends StatefulWidget {
 class _ViewContentState extends State<_ViewContent> {
   Size? _screenSize;
   late Rect _viewRect;
+  late CurvedAnimation viewIconsFadeCurve;
+  late CurvedAnimation viewDividerFadeCurve;
+  late CurvedAnimation viewListFadeOnIntervalCurve;
   late final SearchController _controller;
   Iterable<Widget> result = <Widget>[];
   String? searchValue;
@@ -749,6 +808,7 @@ class _ViewContentState extends State<_ViewContent> {
     _viewRect = widget.viewRect;
     _controller = widget.searchController;
     _controller.addListener(updateSuggestions);
+    _setupAnimations();
   }
 
   @override
@@ -777,9 +837,15 @@ class _ViewContentState extends State<_ViewContent> {
       _timer?.cancel();
       _timer = Timer(Duration.zero, () async {
         searchValue = _controller.text;
-        result = await widget.suggestionsBuilder(context, _controller);
+        final Iterable<Widget> suggestions =
+            await widget.suggestionsBuilder(context, _controller);
         _timer?.cancel();
         _timer = null;
+        if (mounted) {
+          setState(() {
+            result = suggestions;
+          });
+        }
       });
     }
   }
@@ -787,9 +853,34 @@ class _ViewContentState extends State<_ViewContent> {
   @override
   void dispose() {
     _controller.removeListener(updateSuggestions);
+    _disposeAnimations();
     _timer?.cancel();
     _timer = null;
     super.dispose();
+  }
+
+  void _setupAnimations() {
+    viewIconsFadeCurve = CurvedAnimation(
+      parent: widget.animation,
+      curve: _kViewIconsFadeOnInterval,
+      reverseCurve: _kViewIconsFadeOnInterval.flipped,
+    );
+    viewDividerFadeCurve = CurvedAnimation(
+      parent: widget.animation,
+      curve: _kViewDividerFadeOnInterval,
+      reverseCurve: _kViewFadeOnInterval.flipped,
+    );
+      viewListFadeOnIntervalCurve = CurvedAnimation(
+      parent: widget.animation,
+      curve: _kViewListFadeOnInterval,
+      reverseCurve: _kViewListFadeOnInterval.flipped,
+    );
+  }
+
+  void _disposeAnimations() {
+    viewIconsFadeCurve.dispose();
+    viewDividerFadeCurve.dispose();
+    viewListFadeOnIntervalCurve.dispose();
   }
 
   Widget viewBuilder(Iterable<Widget> suggestions) {
@@ -819,11 +910,9 @@ class _ViewContentState extends State<_ViewContent> {
 
   @override
   Widget build(BuildContext context) {
-    final Widget defaultLeading = IconButton(
-      icon: const Icon(Icons.arrow_back),
-      tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-      onPressed: () { Navigator.of(context).pop(); },
+    final Widget defaultLeading = BackButton(
       style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+      onPressed: () { Navigator.of(context).pop(); },
     );
 
     final List<Widget> defaultTrailing = <Widget>[
@@ -900,11 +989,7 @@ class _ViewContentState extends State<_ViewContent> {
                 maxWidth: math.min(widget.viewMaxWidth, _screenSize!.width),
                 minWidth: 0,
                 child: FadeTransition(
-                  opacity: CurvedAnimation(
-                    parent: widget.animation,
-                    curve: _kViewIconsFadeOnInterval,
-                    reverseCurve: _kViewIconsFadeOnInterval.flipped,
-                  ),
+                  opacity: viewIconsFadeCurve,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
@@ -937,19 +1022,11 @@ class _ViewContentState extends State<_ViewContent> {
                         ),
                       ),
                       FadeTransition(
-                        opacity: CurvedAnimation(
-                          parent: widget.animation,
-                          curve: _kViewDividerFadeOnInterval,
-                          reverseCurve: _kViewFadeOnInterval.flipped,
-                        ),
+                        opacity: viewDividerFadeCurve,
                         child: viewDivider),
                       Expanded(
                         child: FadeTransition(
-                          opacity: CurvedAnimation(
-                            parent: widget.animation,
-                            curve: _kViewListFadeOnInterval,
-                            reverseCurve: _kViewListFadeOnInterval.flipped,
-                          ),
+                          opacity: viewListFadeOnIntervalCurve,
                           child: viewBuilder(result),
                         ),
                       ),
@@ -1000,6 +1077,8 @@ class _SearchAnchorWithSearchBar extends SearchAnchor {
     required super.suggestionsBuilder,
     super.textInputAction,
     super.keyboardType,
+    EdgeInsets scrollPadding = const EdgeInsets.all(20.0),
+    EditableTextContextMenuBuilder contextMenuBuilder = SearchBar._defaultContextMenuBuilder,
   }) : super(
     viewHintText: viewHintText ?? barHintText,
     headerHeight: viewHeaderHeight,
@@ -1033,6 +1112,8 @@ class _SearchAnchorWithSearchBar extends SearchAnchor {
         textCapitalization: textCapitalization,
         textInputAction: textInputAction,
         keyboardType: keyboardType,
+        scrollPadding: scrollPadding,
+        contextMenuBuilder: contextMenuBuilder,
       );
     }
   );
@@ -1153,6 +1234,8 @@ class SearchBar extends StatefulWidget {
     this.autoFocus = false,
     this.textInputAction,
     this.keyboardType,
+    this.scrollPadding = const EdgeInsets.all(20.0),
+    this.contextMenuBuilder = _defaultContextMenuBuilder,
   });
 
   /// Controls the text being edited in the search bar's text field.
@@ -1280,7 +1363,11 @@ class SearchBar extends StatefulWidget {
   /// {@macro flutter.widgets.editableText.textCapitalization}
   final TextCapitalization? textCapitalization;
 
-  /// If false the text field is "disabled" so the SearchBar will ignore taps.
+  /// Whether or not this widget is currently interactive.
+  ///
+  /// When false, the widget will ignore taps and appear dimmed.
+  ///
+  /// Defaults to true.
   final bool enabled;
 
   /// {@macro flutter.widgets.editableText.autofocus}
@@ -1293,6 +1380,26 @@ class SearchBar extends StatefulWidget {
   ///
   /// Defaults to the default value specified in [TextField].
   final TextInputType? keyboardType;
+
+  /// {@macro flutter.widgets.editableText.scrollPadding}
+  final EdgeInsets scrollPadding;
+
+  /// {@macro flutter.widgets.EditableText.contextMenuBuilder}
+  ///
+  /// If not provided, will build a default menu based on the platform.
+  ///
+  /// See also:
+  ///
+  ///  * [AdaptiveTextSelectionToolbar], which is built by default.
+  ///  * [BrowserContextMenu], which allows the browser's context menu on web to
+  ///    be disabled and Flutter-rendered context menus to appear.
+  final EditableTextContextMenuBuilder? contextMenuBuilder;
+
+  static Widget _defaultContextMenuBuilder(BuildContext context, EditableTextState editableTextState) {
+    return AdaptiveTextSelectionToolbar.editableText(
+      editableTextState: editableTextState,
+    );
+  }
 
   @override
   State<SearchBar> createState() => _SearchBarState();
@@ -1323,7 +1430,6 @@ class _SearchBarState extends State<SearchBar> {
   Widget build(BuildContext context) {
     final TextDirection textDirection = Directionality.of(context);
     final ColorScheme colorScheme = Theme.of(context).colorScheme;
-    final IconThemeData iconTheme = IconTheme.of(context);
     final SearchBarThemeData searchBarTheme = SearchBarTheme.of(context);
     final SearchBarThemeData defaults = _SearchBarDefaultsM3(context);
 
@@ -1354,33 +1460,27 @@ class _SearchBarState extends State<SearchBar> {
       ?? searchBarTheme.textStyle?.resolve(states)
       ?? defaults.hintStyle?.resolve(states);
 
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    bool isIconThemeColorDefault(Color? color) {
-      if (isDark) {
-        return color == kDefaultIconLightColor;
-      }
-      return color == kDefaultIconDarkColor;
-    }
+    final Color defaultColor = switch (colorScheme.brightness) {
+      Brightness.light => kDefaultIconDarkColor,
+      Brightness.dark  => kDefaultIconLightColor,
+    };
+    final IconThemeData? customTheme = switch (IconTheme.of(context)) {
+      final IconThemeData iconTheme when iconTheme.color != defaultColor => iconTheme,
+      _ => null,
+    };
 
     Widget? leading;
     if (widget.leading != null) {
       leading = IconTheme.merge(
-        data: isIconThemeColorDefault(iconTheme.color)
-          ? IconThemeData(color: colorScheme.onSurface)
-          : iconTheme,
+        data: customTheme ?? IconThemeData(color: colorScheme.onSurface),
         child: widget.leading!,
       );
     }
 
-    List<Widget>? trailing;
-    if (widget.trailing != null) {
-      trailing = widget.trailing?.map((Widget trailing) => IconTheme.merge(
-        data: isIconThemeColorDefault(iconTheme.color)
-          ? IconThemeData(color: colorScheme.onSurfaceVariant)
-          : iconTheme,
-        child: trailing,
-      )).toList();
-    }
+    final List<Widget>? trailing = widget.trailing?.map((Widget trailing) => IconTheme.merge(
+      data: customTheme ?? IconThemeData(color: colorScheme.onSurfaceVariant),
+      child: trailing,
+    )).toList();
 
     return ConstrainedBox(
       constraints: widget.constraints ?? searchBarTheme.constraints ?? defaults.constraints!,
@@ -1441,10 +1541,12 @@ class _SearchBarState extends State<SearchBar> {
                           textCapitalization: effectiveTextCapitalization,
                           textInputAction: widget.textInputAction,
                           keyboardType: widget.keyboardType,
+                          scrollPadding: widget.scrollPadding,
+                          contextMenuBuilder: widget.contextMenuBuilder,
                         ),
                       ),
                     ),
-                    if (trailing != null) ...trailing,
+                    ...?trailing,
                   ],
                 ),
               ),

@@ -10,8 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../widgets/feedback_tester.dart';
 import '../widgets/semantics_tester.dart';
-import 'feedback_tester.dart';
 
 class TestIcon extends StatefulWidget {
   const TestIcon({ super.key });
@@ -154,7 +154,7 @@ void main() {
     await tester.pumpWidget(buildFrame(isTwoLine: true, textScaler: const TextScaler.linear(4.0)));
     testChildren();
     testHorizontalGeometry();
-    if (!kIsWeb || isCanvasKit) { // https://github.com/flutter/flutter/issues/99933
+    if (!kIsWeb || isSkiaWeb) { // https://github.com/flutter/flutter/issues/99933
       testVerticalGeometry(192.0);
     }
 
@@ -162,14 +162,14 @@ void main() {
     await tester.pumpWidget(buildFrame(isTwoLine: true, textScaler: const TextScaler.linear(0.5), subtitleScaler: const TextScaler.linear(4.0)));
     testChildren();
     testHorizontalGeometry();
-    if (!kIsWeb || isCanvasKit) { // https://github.com/flutter/flutter/issues/99933
+    if (!kIsWeb || isSkiaWeb) { // https://github.com/flutter/flutter/issues/99933
       testVerticalGeometry(108.0);
     }
 
     await tester.pumpWidget(buildFrame(isThreeLine: true, textScaler: const TextScaler.linear(4.0)));
     testChildren();
     testHorizontalGeometry();
-    if (!kIsWeb || isCanvasKit) { // https://github.com/flutter/flutter/issues/99933
+    if (!kIsWeb || isSkiaWeb) { // https://github.com/flutter/flutter/issues/99933
       testVerticalGeometry(192.0);
     }
   });
@@ -304,11 +304,12 @@ void main() {
             ),
             TestSemantics.rootChild(
               flags: <SemanticsFlag>[
+                SemanticsFlag.isButton,
                 SemanticsFlag.hasEnabledState,
                 SemanticsFlag.isEnabled,
                 SemanticsFlag.isFocusable,
               ],
-              actions: <SemanticsAction>[SemanticsAction.tap],
+              actions: <SemanticsAction>[SemanticsAction.tap, SemanticsAction.focus],
               label: 'two',
             ),
             TestSemantics.rootChild(
@@ -505,7 +506,7 @@ void main() {
       ),
     );
 
-    if (kIsWeb && !isCanvasKit) { // https://github.com/flutter/flutter/issues/99933
+    if (kIsWeb && !isSkiaWeb) { // https://github.com/flutter/flutter/issues/99933
       return;
     }
     const double height = 300;
@@ -2051,20 +2052,20 @@ void main() {
         'visualDensity: VisualDensity#00000(h: 0.0, v: 0.0)',
         'shape: RoundedRectangleBorder(BorderSide(width: 0.0, style: none), BorderRadius.zero)',
         'style: ListTileStyle.list',
-        'selectedColor: Color(0xff0000ff)',
-        'iconColor: Color(0xff00ff00)',
-        'textColor: Color(0xffff0000)',
+        'selectedColor: ${const Color(0xff0000ff)}',
+        'iconColor: ${const Color(0xff00ff00)}',
+        'textColor: ${const Color(0xffff0000)}',
         'titleTextStyle: TextStyle(inherit: true, size: 22.0)',
         'subtitleTextStyle: TextStyle(inherit: true, size: 18.0)',
         'leadingAndTrailingTextStyle: TextStyle(inherit: true, size: 16.0)',
         'contentPadding: EdgeInsets.zero',
         'enabled: false',
         'selected: true',
-        'focusColor: Color(0xff00ffff)',
-        'hoverColor: Color(0xff0000ff)',
+        'focusColor: ${const Color(0xff00ffff)}',
+        'hoverColor: ${const Color(0xff0000ff)}',
         'autofocus: true',
-        'tileColor: Color(0xffffff00)',
-        'selectedTileColor: Color(0xff123456)',
+        'tileColor: ${const Color(0xffffff00)}',
+        'selectedTileColor: ${const Color(0xff123456)}',
         'enableFeedback: false',
         'horizontalTitleGap: 4.0',
         'minVerticalPadding: 2.0',

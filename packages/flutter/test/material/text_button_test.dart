@@ -10,6 +10,13 @@ import 'package:flutter_test/flutter_test.dart';
 import '../widgets/semantics_tester.dart';
 
 void main() {
+  TextStyle iconStyle(WidgetTester tester, IconData icon) {
+    final RichText iconRichText = tester.widget<RichText>(
+      find.descendant(of: find.byIcon(icon), matching: find.byType(RichText)),
+    );
+    return iconRichText.text.style!;
+  }
+
   testWidgets('TextButton, TextButton.icon defaults', (WidgetTester tester) async {
     const ColorScheme colorScheme = ColorScheme.light();
     final ThemeData theme = ThemeData.from(colorScheme: colorScheme);
@@ -152,6 +159,114 @@ void main() {
     expect(material.textStyle!.fontSize, 14);
     expect(material.textStyle!.fontWeight, FontWeight.w500);
     expect(material.type, MaterialType.button);
+  });
+
+  testWidgets('TextButton.defaultStyle produces a ButtonStyle with appropriate non-null values', (WidgetTester tester) async {
+    const ColorScheme colorScheme = ColorScheme.light();
+    final ThemeData theme = ThemeData.from(colorScheme: colorScheme);
+
+    final TextButton button = TextButton(
+      onPressed: () { },
+      child: const Text('button'),
+    );
+    BuildContext? capturedContext;
+    // Enabled TextButton
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Center(
+          child: Builder(
+            builder: (BuildContext context) {
+              capturedContext = context;
+              return button;
+            }
+          ),
+        ),
+      ),
+    );
+    final ButtonStyle style = button.defaultStyleOf(capturedContext!);
+
+    // Properties that must be non-null.
+    expect(style.textStyle, isNotNull, reason: 'textStyle style');
+    expect(style.backgroundColor, isNotNull, reason: 'backgroundColor style');
+    expect(style.foregroundColor, isNotNull, reason: 'foregroundColor style');
+    expect(style.overlayColor, isNotNull, reason: 'overlayColor style');
+    expect(style.shadowColor, isNotNull, reason: 'shadowColor style');
+    expect(style.surfaceTintColor, isNotNull, reason: 'surfaceTintColor style');
+    expect(style.elevation, isNotNull, reason: 'elevation style');
+    expect(style.padding, isNotNull, reason: 'padding style');
+    expect(style.minimumSize, isNotNull, reason: 'minimumSize style');
+    expect(style.maximumSize, isNotNull, reason: 'maximumSize style');
+    expect(style.iconColor, isNotNull, reason: 'iconColor style');
+    expect(style.iconSize, isNotNull, reason: 'iconSize style');
+    expect(style.shape, isNotNull, reason: 'shape style');
+    expect(style.mouseCursor, isNotNull, reason: 'mouseCursor style');
+    expect(style.visualDensity, isNotNull, reason: 'visualDensity style');
+    expect(style.tapTargetSize, isNotNull, reason: 'tapTargetSize style');
+    expect(style.animationDuration, isNotNull, reason: 'animationDuration style');
+    expect(style.enableFeedback, isNotNull, reason: 'enableFeedback style');
+    expect(style.alignment, isNotNull, reason: 'alignment style');
+    expect(style.splashFactory, isNotNull, reason: 'splashFactory style');
+
+    // Properties that are expected to be null.
+    expect(style.fixedSize, isNull, reason: 'fixedSize style');
+    expect(style.side, isNull, reason: 'side style');
+    expect(style.backgroundBuilder, isNull, reason: 'backgroundBuilder style');
+    expect(style.foregroundBuilder, isNull, reason: 'foregroundBuilder style');
+  });
+
+    testWidgets('TextButton.defaultStyle with an icon produces a ButtonStyle with appropriate non-null values', (WidgetTester tester) async {
+    const ColorScheme colorScheme = ColorScheme.light();
+    final ThemeData theme = ThemeData.from(colorScheme: colorScheme);
+
+    final TextButton button = TextButton.icon(
+      onPressed: () { },
+      icon: const SizedBox(),
+      label: const Text('button'),
+    );
+    BuildContext? capturedContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Center(
+          child: Builder(
+            builder: (BuildContext context) {
+              capturedContext = context;
+              return button;
+            }
+          ),
+        ),
+      ),
+    );
+    final ButtonStyle style = button.defaultStyleOf(capturedContext!);
+
+    // Properties that must be non-null.
+    expect(style.textStyle, isNotNull, reason: 'textStyle style');
+    expect(style.backgroundColor, isNotNull, reason: 'backgroundColor style');
+    expect(style.foregroundColor, isNotNull, reason: 'foregroundColor style');
+    expect(style.overlayColor, isNotNull, reason: 'overlayColor style');
+    expect(style.shadowColor, isNotNull, reason: 'shadowColor style');
+    expect(style.surfaceTintColor, isNotNull, reason: 'surfaceTintColor style');
+    expect(style.elevation, isNotNull, reason: 'elevation style');
+    expect(style.padding, isNotNull, reason: 'padding style');
+    expect(style.minimumSize, isNotNull, reason: 'minimumSize style');
+    expect(style.maximumSize, isNotNull, reason: 'maximumSize style');
+    expect(style.iconColor, isNotNull, reason: 'iconColor style');
+    expect(style.iconSize, isNotNull, reason: 'iconSize style');
+    expect(style.shape, isNotNull, reason: 'shape style');
+    expect(style.mouseCursor, isNotNull, reason: 'mouseCursor style');
+    expect(style.visualDensity, isNotNull, reason: 'visualDensity style');
+    expect(style.tapTargetSize, isNotNull, reason: 'tapTargetSize style');
+    expect(style.animationDuration, isNotNull, reason: 'animationDuration style');
+    expect(style.enableFeedback, isNotNull, reason: 'enableFeedback style');
+    expect(style.alignment, isNotNull, reason: 'alignment style');
+    expect(style.splashFactory, isNotNull, reason: 'splashFactory style');
+
+    // Properties that are expected to be null.
+    expect(style.fixedSize, isNull, reason: 'fixedSize style');
+    expect(style.side, isNull, reason: 'side style');
+    expect(style.backgroundBuilder, isNull, reason: 'backgroundBuilder style');
+    expect(style.foregroundBuilder, isNull, reason: 'foregroundBuilder style');
   });
 
   testWidgets('TextButton.icon produces the correct widgets when icon is null', (WidgetTester tester) async {
@@ -463,6 +578,7 @@ void main() {
             child: TextButton.icon(
               style: ButtonStyle(
                 foregroundColor: MaterialStateProperty.resolveWith<Color>(getTextColor),
+                iconColor: MaterialStateProperty.resolveWith<Color>(getTextColor),
               ),
               key: buttonKey,
               icon: const Icon(Icons.add),
@@ -475,14 +591,13 @@ void main() {
       ),
     );
 
-    Color? iconColor() => _iconStyle(tester, Icons.add)?.color;
     // Default, not disabled.
-    expect(iconColor(), equals(defaultColor));
+    expect(iconStyle(tester, Icons.add).color, equals(defaultColor));
 
     // Focused.
     focusNode.requestFocus();
     await tester.pumpAndSettle();
-    expect(iconColor(), focusedColor);
+    expect(iconStyle(tester, Icons.add).color, focusedColor);
 
     // Hovered.
     final Offset center = tester.getCenter(find.byKey(buttonKey));
@@ -492,13 +607,13 @@ void main() {
     await gesture.addPointer();
     await gesture.moveTo(center);
     await tester.pumpAndSettle();
-    expect(iconColor(), hoverColor);
+    expect(iconStyle(tester, Icons.add).color, hoverColor);
 
     // Highlighted (pressed).
     await gesture.down(center);
     await tester.pump(); // Start the splash and highlight animations.
     await tester.pump(const Duration(milliseconds: 800)); // Wait for splash and highlight to be well under way.
-    expect(iconColor(), pressedColor);
+    expect(iconStyle(tester, Icons.add).color, pressedColor);
 
     focusNode.dispose();
   });
@@ -607,6 +722,7 @@ void main() {
           TestSemantics.rootChild(
             actions: <SemanticsAction>[
               SemanticsAction.tap,
+              SemanticsAction.focus,
             ],
             label: 'ABC',
             rect: const Rect.fromLTRB(0.0, 0.0, 88.0, 48.0),
@@ -695,7 +811,7 @@ void main() {
 
     expect(tester.getSize(find.byType(TextButton)), const Size(134.0, 48.0));
     expect(tester.getSize(find.byType(Text)), const Size(126.0, 42.0));
-  }, skip: kIsWeb && !isCanvasKit); // https://github.com/flutter/flutter/issues/61016
+  }, skip: kIsWeb && !isSkiaWeb); // https://github.com/flutter/flutter/issues/61016
 
   testWidgets('TextButton size is configurable by ThemeData.materialTapTargetSize', (WidgetTester tester) async {
     Widget buildFrame(MaterialTapTargetSize tapTargetSize, Key key) {
@@ -1918,8 +2034,7 @@ void main() {
     Material material = tester.widget<Material>(buttonMaterial);
     expect(material.textStyle!.color, colorScheme.primary);
 
-    Color? iconColor() => _iconStyle(tester, Icons.add)?.color;
-    expect(iconColor(), equals(Colors.red));
+    expect(iconStyle(tester, Icons.add).color, equals(Colors.red));
 
     // disabled button
     await tester.pumpWidget(
@@ -1944,7 +2059,7 @@ void main() {
 
     material = tester.widget<Material>(buttonMaterial);
     expect(material.textStyle!.color, colorScheme.onSurface.withOpacity(0.38));
-    expect(iconColor(), equals(Colors.blue));
+    expect(iconStyle(tester, Icons.add).color, equals(Colors.blue));
   });
 
   testWidgets("TextButton.styleFrom doesn't throw exception on passing only one cursor", (WidgetTester tester) async {
@@ -2300,11 +2415,85 @@ void main() {
     // The icon is aligned to the left of the button.
     expect(buttonTopLeft.dx, iconTopLeft.dx - 16.0); // 16.0 - padding between icon and button edge.
   });
-}
 
-TextStyle? _iconStyle(WidgetTester tester, IconData icon) {
-  final RichText iconRichText = tester.widget<RichText>(
-    find.descendant(of: find.byIcon(icon), matching: find.byType(RichText)),
-  );
-  return iconRichText.text.style;
+  testWidgets('treats a hovering stylus like a mouse', (WidgetTester tester) async {
+    final FocusNode focusNode = FocusNode();
+    addTearDown(focusNode.dispose);
+    final ThemeData theme = ThemeData(useMaterial3: true);
+    bool hasBeenHovered = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (BuildContext context) {
+                return TextButton(
+                  onPressed: () {},
+                  onHover: (bool entered) {
+                    hasBeenHovered = true;
+                  },
+                  focusNode: focusNode,
+                  child: const Text('TextButton'),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    RenderObject overlayColor() {
+      return tester.allRenderObjects.firstWhere((RenderObject object) => object.runtimeType.toString() == '_RenderInkFeatures');
+    }
+
+    final Offset center = tester.getCenter(find.byType(TextButton));
+    final TestGesture gesture = await tester.createGesture(
+      kind: PointerDeviceKind.stylus,
+    );
+    await gesture.addPointer();
+    await tester.pumpAndSettle();
+
+    expect(hasBeenHovered, isFalse);
+
+    await gesture.moveTo(center);
+    await tester.pumpAndSettle();
+    expect(overlayColor(), paints..rect(color: theme.colorScheme.primary.withOpacity(0.08)));
+    expect(hasBeenHovered, isTrue);
+  });
+
+  // Regression test for https://github.com/flutter/flutter/issues/154798.
+  testWidgets('TextButton.styleFrom can customize the button icon', (WidgetTester tester) async {
+    const Color iconColor = Color(0xFFF000FF);
+    const double iconSize = 32.0;
+    const Color disabledIconColor = Color(0xFFFFF000);
+    Widget buildButton({ bool enabled = true }) {
+      return MaterialApp(
+        home: Material(
+          child: Center(
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                iconColor: iconColor,
+                iconSize: iconSize,
+                disabledIconColor: disabledIconColor,
+              ),
+              onPressed: enabled ? () {} : null,
+              icon: const Icon(Icons.add),
+              label: const Text('Button'),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Test enabled button.
+    await tester.pumpWidget(buildButton());
+    expect(tester.getSize(find.byIcon(Icons.add)), const Size(iconSize, iconSize));
+    expect(iconStyle(tester, Icons.add).color, iconColor);
+
+    // Test disabled button.
+    await tester.pumpWidget(buildButton(enabled: false));
+    expect(iconStyle(tester, Icons.add).color, disabledIconColor);
+  });
 }

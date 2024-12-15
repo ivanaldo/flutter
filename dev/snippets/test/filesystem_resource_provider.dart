@@ -6,8 +6,13 @@ import 'dart:io' as io;
 import 'dart:typed_data';
 
 import 'package:analyzer/file_system/file_system.dart';
+<<<<<<< HEAD
 import 'package:analyzer/src/generated/source.dart';
 import 'package:analyzer/src/source/source_resource.dart';
+=======
+import 'package:analyzer/source/file_source.dart';
+import 'package:analyzer/source/source.dart';
+>>>>>>> 8495dee1fd4aacbe9de707e7581203232f591b2f
 import 'package:file/file.dart' as file;
 import 'package:file/local.dart' as file;
 import 'package:meta/meta.dart';
@@ -98,6 +103,14 @@ class FileSystemResourceProvider implements ResourceProvider {
       return true;
     }());
   }
+<<<<<<< HEAD
+=======
+
+  @override
+  Link getLink(String path) {
+    throw UnimplementedError('getLink Not Implemented');
+  }
+>>>>>>> 8495dee1fd4aacbe9de707e7581203232f591b2f
 }
 
 /// A `dart:io` based implementation of [File].

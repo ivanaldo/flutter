@@ -2,6 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'package:flutter/cupertino.dart';
+/// @docImport 'package:flutter/material.dart';
+///
+/// @docImport 'app.dart';
+/// @docImport 'routes.dart';
+/// @docImport 'text_editing_intents.dart';
+library;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
@@ -106,8 +114,8 @@ typedef ActionListenerCallback = void Function(Action<Intent> action);
 /// developers to change that if they add an ancestor [Actions] widget that maps
 /// [SelectAllTextIntent] to a different [Action].
 ///
-/// See the article on [Using Actions and
-/// Shortcuts](https://docs.flutter.dev/development/ui/advanced/actions_and_shortcuts)
+/// See the article on
+/// [Using Actions and Shortcuts](https://flutter.dev/to/actions-shortcuts)
 /// for a detailed explanation.
 ///
 /// See also:
@@ -238,13 +246,10 @@ abstract class Action<T extends Intent> with Diagnosticable {
   /// [ContextAction] instead of [Action].
   bool isEnabled(T intent) => isActionEnabled;
 
-  bool _isEnabled(T intent, BuildContext? context) {
-    final Action<T> self = this;
-    if (self is ContextAction<T>) {
-      return self.isEnabled(intent, context);
-    }
-    return self.isEnabled(intent);
-  }
+  bool _isEnabled(T intent, BuildContext? context) => switch (this) {
+    final ContextAction<T> action => action.isEnabled(intent, context),
+    _ => isEnabled(intent),
+  };
 
   /// Whether this [Action] is inherently enabled.
   ///
@@ -330,13 +335,10 @@ abstract class Action<T extends Intent> with Diagnosticable {
   @protected
   Object? invoke(T intent);
 
-  Object? _invoke(T intent, BuildContext? context) {
-    final Action<T> self = this;
-    if (self is ContextAction<T>) {
-      return self.invoke(intent, context);
-    }
-    return self.invoke(intent);
-  }
+  Object? _invoke(T intent, BuildContext? context) => switch (this) {
+    final ContextAction<T> action => action.invoke(intent, context),
+    _ => invoke(intent),
+  };
 
   /// Register a callback to listen for changes to the state of this action.
   ///
@@ -1315,9 +1317,7 @@ class _FocusableActionDetectorState extends State<FocusableActionDetector> {
     final FocusableActionDetector oldTarget = oldWidget ?? widget;
     final bool didShowHoverHighlight = shouldShowHoverHighlight(oldTarget);
     final bool didShowFocusHighlight = shouldShowFocusHighlight(oldTarget);
-    if (task != null) {
-      task();
-    }
+    task?.call();
     final bool doShowHoverHighlight = shouldShowHoverHighlight(widget);
     final bool doShowFocusHighlight = shouldShowFocusHighlight(widget);
     if (didShowFocusHighlight != doShowFocusHighlight) {

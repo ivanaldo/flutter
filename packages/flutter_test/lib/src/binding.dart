@@ -2,6 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/// @docImport 'dart:io';
+///
+/// @docImport 'controller.dart';
+/// @docImport 'test_pointer.dart';
+/// @docImport 'widget_tester.dart';
+library;
+
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -254,6 +261,14 @@ abstract class TestWidgetsFlutterBinding extends BindingBase
       _testTextInput.register();
     }
     CustomSemanticsAction.resetForTests(); // ignore: invalid_use_of_visible_for_testing_member
+    _enableFocusManagerLifecycleAwarenessIfSupported();
+  }
+
+  void _enableFocusManagerLifecycleAwarenessIfSupported() {
+    if (buildOwner == null) {
+      return;
+    }
+    buildOwner!.focusManager.listenToApplicationLifecycleChangesIfSupported(); // ignore: invalid_use_of_visible_for_testing_member
   }
 
   @override
@@ -834,20 +849,15 @@ abstract class TestWidgetsFlutterBinding extends BindingBase
   }
 
   Future<void> _handleAnnouncementMessage(Object? mockMessage) async {
-    final Map<Object?, Object?> message = mockMessage! as Map<Object?, Object?>;
-    if (message['type'] == 'announce') {
-      final Map<Object?, Object?> data =
-          message['data']! as Map<Object?, Object?>;
-      final String dataMessage = data['message'].toString();
-      final TextDirection textDirection =
-          TextDirection.values[data['textDirection']! as int];
-      final int assertivenessLevel = (data['assertiveness'] as int?) ?? 0;
-      final Assertiveness assertiveness =
-          Assertiveness.values[assertivenessLevel];
-      final CapturedAccessibilityAnnouncement announcement =
-          CapturedAccessibilityAnnouncement._(
-              dataMessage, textDirection, assertiveness);
-      _announcements.add(announcement);
+    if (mockMessage! case {
+      'type': 'announce',
+      'data': final Map<Object?, Object?> data as Map<Object?, Object?>,
+    }) {
+      _announcements.add(CapturedAccessibilityAnnouncement._(
+        data['message'].toString(),
+        TextDirection.values[data['textDirection']! as int],
+        Assertiveness.values[(data['assertiveness'] ?? 0) as int],
+      ));
     }
   }
 
@@ -1634,6 +1644,12 @@ enum LiveTestWidgetsFlutterBindingFramePolicy {
   benchmarkLive,
 }
 
+enum _HandleDrawFrame {
+  reset,
+  drawFrame,
+  skipFrame,
+}
+
 /// A variant of [TestWidgetsFlutterBinding] for executing tests
 /// on a device, typically via `flutter run`, or via integration tests.
 /// This is intended to allow interactive test development.
@@ -1764,31 +1780,35 @@ class LiveTestWidgetsFlutterBinding extends TestWidgetsFlutterBinding {
     return super.reassembleApplication();
   }
 
-  bool? _doDrawThisFrame;
+  _HandleDrawFrame _drawFrame = _HandleDrawFrame.reset;
 
   @override
   void handleBeginFrame(Duration? rawTimeStamp) {
-    assert(_doDrawThisFrame == null);
+    if (_drawFrame != _HandleDrawFrame.reset) {
+      throw StateError('handleBeginFrame() called before previous handleDrawFrame()');
+    }
     if (_expectingFrame ||
         _expectingFrameToReassemble ||
         (framePolicy == LiveTestWidgetsFlutterBindingFramePolicy.fullyLive) ||
         (framePolicy == LiveTestWidgetsFlutterBindingFramePolicy.benchmarkLive) ||
         (framePolicy == LiveTestWidgetsFlutterBindingFramePolicy.benchmark) ||
         (framePolicy == LiveTestWidgetsFlutterBindingFramePolicy.fadePointers && _viewNeedsPaint)) {
-      _doDrawThisFrame = true;
+      _drawFrame = _HandleDrawFrame.drawFrame;
       super.handleBeginFrame(rawTimeStamp);
     } else {
-      _doDrawThisFrame = false;
+      _drawFrame = _HandleDrawFrame.skipFrame;
     }
   }
 
   @override
   void handleDrawFrame() {
-    assert(_doDrawThisFrame != null);
-    if (_doDrawThisFrame!) {
+    if (_drawFrame == _HandleDrawFrame.reset) {
+      throw StateError('handleDrawFrame() called without paired handleBeginFrame()');
+    }
+    if (_drawFrame == _HandleDrawFrame.drawFrame) {
       super.handleDrawFrame();
     }
-    _doDrawThisFrame = null;
+    _drawFrame = _HandleDrawFrame.reset;
     _viewNeedsPaint = false;
     _expectingFrameToReassemble = false;
     if (_expectingFrame) { // set during pump
@@ -1817,7 +1837,13 @@ class LiveTestWidgetsFlutterBinding extends TestWidgetsFlutterBinding {
     fontSize: 10.0,
   );
 
-  void _setDescription(String value) {
+  /// Label describing the test.
+  @visibleForTesting
+  TextPainter? get label => _label;
+
+  /// Set a description label that is drawn into the test output.
+  @protected
+  void setLabel(String value) {
     if (value.isEmpty) {
       _label = null;
       return;
@@ -2018,7 +2044,7 @@ class LiveTestWidgetsFlutterBinding extends TestWidgetsFlutterBinding {
   }) {
     assert(!inTest);
     _inTest = true;
-    _setDescription(description);
+    setLabel(description);
     return _runTest(testBody, invariantTester, description);
   }
 
@@ -2098,7 +2124,11 @@ class LiveTestWidgetsFlutterBinding extends TestWidgetsFlutterBinding {
 ///
 /// The resulting ViewConfiguration maps the given size onto the actual display
 /// using the [BoxFit.contain] algorithm.
-class TestViewConfiguration extends ViewConfiguration {
+///
+/// If the underlying [FlutterView] changes, a new [TestViewConfiguration] should
+/// be created. See [RendererBinding.handleMetricsChanged] and
+/// [RendererBinding.createViewConfigurationFor].
+class TestViewConfiguration implements ViewConfiguration {
   /// Deprecated. Will be removed in a future version of Flutter.
   ///
   /// This property has been deprecated to prepare for Flutter's upcoming
@@ -2120,14 +2150,29 @@ class TestViewConfiguration extends ViewConfiguration {
   /// Creates a [TestViewConfiguration] with the given size and view.
   ///
   /// The [size] defaults to 800x600.
-  TestViewConfiguration.fromView({required ui.FlutterView view, Size size = _kDefaultTestViewportSize})
-      : _paintMatrix = _getMatrix(size, view.devicePixelRatio, view),
-        _physicalSize = view.physicalSize,
-        super(
-          devicePixelRatio: view.devicePixelRatio,
-          logicalConstraints: BoxConstraints.tight(size),
-          physicalConstraints: BoxConstraints.tight(size) * view.devicePixelRatio,
-      );
+  ///
+  /// The settings of the given [FlutterView] are captured when the constructor
+  /// is called, and subsequent changes are ignored. A new
+  /// [TestViewConfiguration] should be created if the underlying [FlutterView]
+  /// changes. See [RendererBinding.handleMetricsChanged] and
+  /// [RendererBinding.createViewConfigurationFor].
+  TestViewConfiguration.fromView({
+    required ui.FlutterView view,
+    Size size = _kDefaultTestViewportSize,
+  }) : devicePixelRatio = view.devicePixelRatio,
+       logicalConstraints = BoxConstraints.tight(size),
+       physicalConstraints =  BoxConstraints.tight(size) * view.devicePixelRatio,
+       _paintMatrix = _getMatrix(size, view.devicePixelRatio, view),
+       _physicalSize = view.physicalSize;
+
+  @override
+  final double devicePixelRatio;
+
+  @override
+  final BoxConstraints logicalConstraints;
+
+  @override
+  final BoxConstraints physicalConstraints;
 
   static Matrix4 _getMatrix(Size size, double devicePixelRatio, ui.FlutterView window) {
     final double inverseRatio = devicePixelRatio / window.devicePixelRatio;
@@ -2157,6 +2202,18 @@ class TestViewConfiguration extends ViewConfiguration {
 
   @override
   Matrix4 toMatrix() => _paintMatrix.clone();
+
+  @override
+  bool shouldUpdateMatrix(ViewConfiguration oldConfiguration) {
+    if (oldConfiguration.runtimeType != runtimeType) {
+      // New configuration could have different logic, so we don't know
+      // whether it will need a new transform. Return a conservative result.
+      return true;
+    }
+    oldConfiguration as TestViewConfiguration;
+    // Compare the matrices directly since they are cached.
+    return oldConfiguration._paintMatrix != _paintMatrix;
+  }
 
   final Size _physicalSize;
 
